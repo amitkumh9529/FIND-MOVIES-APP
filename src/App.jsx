@@ -9,59 +9,60 @@ const API_BASE_URL = "https://api.themoviedb.org/3";
 
 const API_KEY = import.meta.env.VITE_TMDB_API_KEY;
 
+// Removed Bearer auth — v3 API requires api_key as a query param
 const API_OPTIONS = {
   method: "GET",
   headers: {
     accept: "application/json",
-    Authorization: `Bearer ${API_KEY}`,
   },
 };
 
 const App = () => {
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
-  
+
   const [movieList, setMovieList] = useState([]);
   const [errorMessage, setErrorMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  
-  
+
   const [trendingMovies, setTrendingMovies] = useState([]);
 
   // Debounce the search term to prevent too many API requests
   //by waiting for the user to stop typing for 500ms
-
   useDebounce(() => setDebouncedSearchTerm(searchTerm), 500, [searchTerm]);
 
   const fetchMovies = async (query = "") => {
     setIsLoading(true);
     setErrorMessage("");
     try {
-      const endpoint = query
-        ? `${API_BASE_URL}/search/movie?query=${encodeURIComponent(query)}`
-        : `${API_BASE_URL}/discover/movie?sort_by=popularity.desc`;
+      // build base endpoint (without api_key)
+      const baseEndpoint = query
+        ? `${API_BASE_URL}/search/movie?query=${encodeURIComponent(
+            query
+          )}&language=en-US&page=1`
+        : `${API_BASE_URL}/discover/movie?sort_by=popularity.desc&language=en-US&page=1`;
+
+      // ensure api_key param is appended
+      const endpoint = baseEndpoint.includes("?")
+        ? `${baseEndpoint}&api_key=${API_KEY}`
+        : `${baseEndpoint}?api_key=${API_KEY}`;
 
       const response = await fetch(endpoint, API_OPTIONS);
 
       if (!response.ok) {
-        throw new Error("Failed to fetch movies");
+        throw new Error(`Failed to fetch movies (${response.status})`);
       }
 
       const data = await response.json();
 
-      if (data.Response === "False") {
-        setErrorMessage(data.Error || "Failed to fetch movies");
-        setMovieList([]);
-        return;
-      }
-
+      // TMDB v3 returns results in data.results
       setMovieList(data.results || []);
 
-      if (query && data.results.length > 0) {
+      if (query && data.results && data.results.length > 0) {
         await updateSearchCount(query, data.results[0]);
       }
     } catch (error) {
-      console.log(`Error fetching movies: error`);
+      console.log("Error fetching movies:", error);
       setErrorMessage("Error fetching movies. Please try again later.");
     } finally {
       setIsLoading(false);
